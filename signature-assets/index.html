@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signature Assets Manager</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            max-width: 1000px; 
+            margin: 40px auto; 
+            padding: 0 20px;
+            background: #f9fafb;
+        }
+        .section {
+            margin: 40px 0;
+        }
+        .assets-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .asset {
+            background: white;
+            border: 1px solid #e5e7eb;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .private-asset {
+            background: #f8fafc;
+            border: 1px solid #e5e7eb;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .asset img {
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 15px;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+        }
+        .url {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            word-break: break-all;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+        .url code {
+            color: #4a5568;
+        }
+        .copy-btn {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        .copy-btn:hover {
+            background: #4338ca;
+        }
+        .copy-btn:active {
+            transform: translateY(1px);
+        }
+        .copy-btn.copied {
+            background: #059669;
+        }
+        .meta {
+            font-size: 14px;
+            color: #6b7280;
+            margin-top: 10px;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+        .private-section {
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+    </style>
+</head>
+<body>
+    <h1>Signature Assets Manager</h1>
+    
+    <!-- Public Assets Section -->
+    <div class="section">
+        <h2>Public Assets</h2>
+        <div id="public-assets" class="assets-grid">
+            <div class="loading">Loading assets...</div>
+        </div>
+    </div>
+
+    <!-- Private Assets Section -->
+    <div class="section">
+        <h2>Private Assets</h2>
+        <div id="private-assets" class="private-section">
+            <div class="loading">Loading assets...</div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchRepoContents() {
+            const username = window.location.hostname.split('.')[0];
+            const repoName = window.location.pathname.split('/')[1];
+            const assetsPath = 'assets';
+            const apiUrl = `https://api.github.com/repos/${username}/${repoName}/contents/${assetsPath}`;
+            
+            try {
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+                return data.filter(file => 
+                    file.type === 'file' && 
+                    /\.(jpg|jpeg|png|gif|svg)$/i.test(file.name)
+                );
+            } catch (error) {
+                console.error('Error fetching repo contents:', error);
+                return [];
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function isBase64Name(filename) {
+            // Check if the filename (without extension) is base64 encoded
+            const nameWithoutExt = filename.split('.').slice(0, -1).join('.');
+            try {
+                return /^[A-Za-z0-9+/]+=*$/.test(nameWithoutExt) && 
+                       nameWithoutExt.length % 4 === 0;
+            } catch {
+                return false;
+            }
+        }
+
+        function createPublicAssetElement(file) {
+            const assetDiv = document.createElement('div');
+            assetDiv.className = 'asset';
+            
+            const fileName = document.createElement('h3');
+            fileName.textContent = file.name;
+            
+            const img = document.createElement('img');
+            img.src = file.download_url;
+            img.alt = file.name;
+            
+            const url = document.createElement('div');
+            url.className = 'url';
+            url.innerHTML = `<code>${file.download_url}</code>`;
+            
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'copy-btn';
+            copyBtn.textContent = 'Copy URL';
+            copyBtn.onclick = async () => {
+                await navigator.clipboard.writeText(file.download_url);
+                copyBtn.textContent = 'Copied!';
+                copyBtn.classList.add('copied');
+                setTimeout(() => {
+                    copyBtn.textContent = 'Copy URL';
+                    copyBtn.classList.remove('copied');
+                }, 2000);
+            };
+            
+            const meta = document.createElement('div');
+            meta.className = 'meta';
+            meta.textContent = `Size: ${formatBytes(file.size)}`;
+            
+            assetDiv.append(fileName, img, url, copyBtn, meta);
+            return assetDiv;
+        }
+
+        function createPrivateAssetElement(file) {
+            const assetDiv = document.createElement('div');
+            assetDiv.className = 'private-asset';
+            
+            const url = document.createElement('div');
+            url.className = 'url';
+            url.innerHTML = `<code>${file.download_url}</code>`;
+            
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'copy-btn';
+            copyBtn.textContent = 'Copy URL';
+            copyBtn.onclick = async () => {
+                await navigator.clipboard.writeText(file.download_url);
+                copyBtn.textContent = 'Copied!';
+                copyBtn.classList.add('copied');
+                setTimeout(() => {
+                    copyBtn.textContent = 'Copy URL';
+                    copyBtn.classList.remove('copied');
+                }, 2000);
+            };
+            
+            const meta = document.createElement('div');
+            meta.className = 'meta';
+            meta.textContent = `Size: ${formatBytes(file.size)}`;
+            
+            assetDiv.append(url, copyBtn, meta);
+            return assetDiv;
+        }
+
+        async function initializeAssetManager() {
+            const publicContainer = document.getElementById('public-assets');
+            const privateContainer = document.getElementById('private-assets');
+            const files = await fetchRepoContents();
+            
+            if (files.length === 0) {
+                publicContainer.innerHTML = '<div class="loading">No assets found. Add images to the assets folder.</div>';
+                privateContainer.innerHTML = '<div class="loading">No private assets found.</div>';
+                return;
+            }
+            
+            publicContainer.innerHTML = '';
+            privateContainer.innerHTML = '';
+            
+            let hasPublic = false;
+            let hasPrivate = false;
+            
+            files.forEach(file => {
+                if (isBase64Name(file.name)) {
+                    hasPrivate = true;
+                    privateContainer.appendChild(createPrivateAssetElement(file));
+                } else {
+                    hasPublic = true;
+                    publicContainer.appendChild(createPublicAssetElement(file));
+                }
+            });
+            
+            if (!hasPublic) {
+                publicContainer.innerHTML = '<div class="loading">No public assets found.</div>';
+            }
+            if (!hasPrivate) {
+                privateContainer.innerHTML = '<div class="loading">No private assets found.</div>';
+            }
+        }
+
+        // Initialize when page loads
+        initializeAssetManager();
+    </script>
+</body>
+</html>
